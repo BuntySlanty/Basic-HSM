@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS patients(
  id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT NOT NULL UNIQUE,
  name TEXT NOT NULL, age INTEGER NOT NULL, age_unit TEXT NOT NULL,
  sex TEXT NOT NULL, phone TEXT NOT NULL, address TEXT NOT NULL,
- guardian TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+ guardian TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ created_by TEXT REFERENCES users(id));
 CREATE INDEX IF NOT EXISTS patient_phone ON patients(phone);
 CREATE INDEX IF NOT EXISTS patient_name ON patients(name COLLATE NOCASE);
 CREATE TABLE IF NOT EXISTS doctors(
@@ -121,7 +122,6 @@ CREATE INDEX IF NOT EXISTS payment_visit_idx ON payments(visit_sr);
 CREATE TABLE IF NOT EXISTS audit_log(
  id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT REFERENCES users(id),
  created_at TEXT NOT NULL, action TEXT NOT NULL, entity TEXT NOT NULL, detail TEXT NOT NULL);
-PRAGMA user_version=2;
 """
 
 
@@ -137,10 +137,10 @@ class Service:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1, 2):
+        if version not in (0, 1, 2, 3):
             self.db.close()
             raise ValueError("Database version is newer than this application.")
-        self.db.executescript(SCHEMA)
+        self._ensure_schema()
         with self.tx():
             for k, v in DEFAULTS.items():
                 self.db.execute("INSERT OR IGNORE INTO settings VALUES (?,?)", (k, v))
@@ -148,6 +148,17 @@ class Service:
             self.db.execute("""UPDATE receipt_counter SET last_sr=MAX(last_sr,
                 COALESCE((SELECT MAX(sr) FROM visits),0),
                 COALESCE((SELECT MAX(sr) FROM procedure_receipts),0)) WHERE id=1""")
+
+    def _ensure_schema(self):
+        self.db.executescript(SCHEMA)
+        with self.tx():
+            columns = {row["name"] for row in self.db.execute("PRAGMA table_info(patients)")}
+            if "created_by" not in columns:
+                self.db.execute("ALTER TABLE patients ADD COLUMN created_by TEXT REFERENCES users(id)")
+                self.db.execute("""UPDATE patients SET created_by=(
+                    SELECT v.created_by FROM visits v WHERE v.patient_id=patients.id
+                    ORDER BY v.sr LIMIT 1) WHERE created_by IS NULL""")
+            self.db.execute("PRAGMA user_version=3")
 
     @contextmanager
     def tx(self):
@@ -281,12 +292,16 @@ class Service:
         self.require()
         query = str(query).strip()
         return [dict(r) for r in self.db.execute(
-            "SELECT * FROM patients WHERE name LIKE ? OR phone LIKE ? OR CAST(id AS TEXT)=? ORDER BY id DESC LIMIT 200",
+            "SELECT p.*,COALESCE(u.username,'Unknown') AS registered_by FROM patients p "
+            "LEFT JOIN users u ON u.id=p.created_by WHERE p.name LIKE ? OR p.phone LIKE ? "
+            "OR CAST(p.id AS TEXT)=? ORDER BY p.id DESC LIMIT 200",
             (f"%{query}%", f"%{query}%", query))]
 
     def patient(self, patient_id):
         self.require()
-        row = self.db.execute("SELECT * FROM patients WHERE id=?", (patient_id,)).fetchone()
+        row = self.db.execute("SELECT p.*,COALESCE(u.username,'Unknown') AS registered_by "
+                              "FROM patients p LEFT JOIN users u ON u.id=p.created_by WHERE p.id=?",
+                              (patient_id,)).fetchone()
         if not row:
             raise ValueError("Patient not found.")
         return dict(row)
@@ -303,7 +318,7 @@ class Service:
         return age
 
     def save_patient(self, values, patient_id=None):
-        self.require()
+        actor = self.require()
         age = self.validate_age(values.get("age", ""), values.get("age_unit"))
         sex = values.get("sex")
         if sex not in ("Male", "Female", "Other", "Unknown"):
@@ -315,8 +330,8 @@ class Service:
         with self.tx():
             stamp = self.stamp()
             if patient_id is None:
-                cur = self.db.execute("INSERT INTO patients(uuid,name,age,age_unit,sex,phone,address,guardian,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                                      (uid(), *fields, stamp, stamp))
+                cur = self.db.execute("INSERT INTO patients(uuid,name,age,age_unit,sex,phone,address,guardian,created_at,updated_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                      (uid(), *fields, stamp, stamp, actor["id"]))
                 patient_id = cur.lastrowid
             else:
                 self.patient(patient_id)
@@ -390,7 +405,8 @@ class Service:
             patient = self.patient(patient_id)
             stamp = self.stamp()
             sr = self._next_receipt_sr()
-            snapshot = {"patient": patient, "hospital": self.settings(), "procedure": name}
+            snapshot = {"patient": patient, "hospital": self.settings(), "procedure": name,
+                        "receptionist": actor["username"]}
             self.db.execute("""INSERT INTO procedure_receipts
                 (sr,uuid,request_key,patient_id,procedure_name,receipt_date,created_at,fee,method,snapshot,created_by)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
@@ -407,7 +423,12 @@ class Service:
         row = self.db.execute("SELECT * FROM procedure_receipts WHERE sr=?", (sr,)).fetchone()
         if not row:
             raise ValueError("Procedure receipt not found.")
-        return {**dict(row), "snapshot": json.loads(row["snapshot"])}
+        snapshot = json.loads(row["snapshot"])
+        if "receptionist" not in snapshot:
+            staff = self.db.execute("SELECT username FROM users WHERE id=?",
+                                    (row["created_by"],)).fetchone()
+            snapshot["receptionist"] = staff["username"] if staff else "Unknown"
+        return {**dict(row), "snapshot": snapshot}
 
     def procedure_receipts(self, start, end, patient_id=None):
         self.require()
@@ -464,7 +485,8 @@ class Service:
                             (doctor_id, day))
             token = self.db.execute("SELECT last_token FROM token_counters WHERE doctor_id=? AND visit_date=?", (doctor_id, day)).fetchone()[0]
             snapshot = {"patient": {**patient, "age": age, "age_unit": age_unit},
-                        "doctor": dict(doctor), "hospital": self.settings()}
+                        "doctor": dict(doctor), "hospital": self.settings(),
+                        "receptionist": actor["username"]}
             sr = self._next_receipt_sr()
             self.db.execute("INSERT INTO visits(sr,uuid,request_key,patient_id,doctor_id,visit_date,created_at,token,fee,discount,discount_reason,snapshot,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (sr, uid(), request_key, patient_id, doctor_id, day, stamp, token,
@@ -484,6 +506,10 @@ class Service:
             raise ValueError("Visit not found.")
         result = dict(row)
         result["snapshot"] = json.loads(result["snapshot"])
+        if "receptionist" not in result["snapshot"]:
+            staff = self.db.execute("SELECT username FROM users WHERE id=?",
+                                    (result["created_by"],)).fetchone()
+            result["snapshot"]["receptionist"] = staff["username"] if staff else "Unknown"
         result["payments"] = [dict(r) for r in self.db.execute("SELECT * FROM payments WHERE visit_sr=? ORDER BY created_at,rowid", (sr,))]
         result["net_paid"] = sum(p["amount"] for p in result["payments"])
         result["due"] = result["fee"] - result["discount"]
@@ -655,13 +681,17 @@ class Service:
         if not source.is_file() or source == self.path.resolve():
             raise ValueError("Choose a separate valid backup file.")
         with closing(sqlite3.connect(source.as_uri()+"?mode=ro", uri=True)) as other:
-            if other.execute("PRAGMA user_version").fetchone()[0] not in (1, 2):
+            if other.execute("PRAGMA user_version").fetchone()[0] not in (1, 2, 3):
                 raise ValueError("Unsupported backup version.")
             if other.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or other.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("Backup failed integrity checks.")
             for table in ("users", "patients", "doctors", "visits", "payments", "settings", "token_counters", "audit_log"):
                 incoming = [tuple(r) for r in other.execute(f"PRAGMA table_info({table})")]
                 current = [tuple(r) for r in self.db.execute(f"PRAGMA table_info({table})")]
+                if table == "patients" and incoming != current:
+                    legacy_patient_schema = [column for column in current if column[1] != "created_by"]
+                    if incoming == legacy_patient_schema:
+                        continue
                 if incoming != current:
                     raise ValueError("Backup schema does not match this application.")
             for table in ("receipt_counter", "procedures", "procedure_receipts"):
@@ -677,8 +707,8 @@ class Service:
             counters = [tuple(r) for r in self.db.execute("SELECT doctor_id,visit_date,last_token FROM token_counters")]
             receipt_high_water = self.db.execute("SELECT last_sr FROM receipt_counter WHERE id=1").fetchone()[0]
             other.backup(self.db)
-        # Version-1 backups predate procedure receipts and the shared serial counter.
-        self.db.executescript(SCHEMA)
+        # Earlier backups predate the patient registrant column and procedure tables.
+        self._ensure_schema()
         with self.tx():
             for key, value in DEFAULTS.items():
                 self.db.execute("INSERT OR IGNORE INTO settings VALUES (?,?)", (key, value))

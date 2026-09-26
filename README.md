@@ -1,11 +1,12 @@
 # Furqan Hospital Reception
 
-**Version 0.2.0 — functional source build for Windows acceptance testing.**
+**Version 0.3.0 — functional source build for Windows acceptance testing.**
 
 Offline patient/doctor records, visits, continuous serial numbers, doctor-specific
 daily tokens, per-visit fees, procedure receipts, fee collection, thermal receipts,
 patient history, printable shift reports, refunds, staff accounts, backups and
-structured export.
+structured export. Consultation and procedure slips identify the logged-in
+receptionist; the Patients screen shows who registered each patient.
 
 Documentation is in `docs/RECEPTION_SPEC.md`; implementation is in `reception/`.
 
@@ -38,10 +39,10 @@ installed on the reception PC after packaging. This is a portable application
 folder, not an MSI installer. A folder build avoids self-extraction on each launch.
 
 **No Windows executable is included in this delivery.** PyInstaller must run on
-Windows to build a Windows application. The exact Windows version/architecture,
-UI layout, low-spec performance and actual thermal printer have not been verified
-in the Linux development environment. Follow the acceptance checklist before use
-with real patients. Do not disable Windows security checks to run a build.
+Windows to build a Windows application. The target Windows version/architecture,
+display scaling, low-spec performance and physical printers still need acceptance
+checks before use with real patients. Do not disable Windows security checks to
+run a build.
 
 ## Thermal printer
 1. Install the printer's Windows driver and print its Windows test page.

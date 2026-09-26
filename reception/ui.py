@@ -592,13 +592,16 @@ class App:
         query = tk.StringVar()
         entry = ttk.Entry(bar,textvariable=query,width=40)
         entry.pack(side="left",padx=(0,8))
-        tree = self.table(self.content,[("id","Patient ID",80),("name","Name",220),("age","Last reported age",130),("sex","Sex",80),("phone","Phone",150)],13)
+        tree = self.table(self.content,[("id","Patient ID",80),("name","Name",220),
+            ("age","Last reported age",130),("sex","Sex",80),("phone","Phone",150),
+            ("registered_by","Receptionist",140)],13)
 
         def refresh(_=None):
             self.clear_tree(tree)
             for p in self.s.patients(query.get()):
                 self.add_row(tree, iid=str(p["id"]),
-                             values=(p["id"], p["name"], f"{p['age']} {p['age_unit']}", p["sex"], p["phone"]))
+                             values=(p["id"], p["name"], f"{p['age']} {p['age_unit']}",
+                                     p["sex"], p["phone"], p["registered_by"]))
 
         self.button(bar,"Search",refresh)
         self.button(bar,"New patient",lambda: self.patient_form(callback=refresh))

@@ -1,8 +1,10 @@
 # Validation and installation handoff
 
-Version: 0.2.0. Updated 26 September 2026 (Pakistan date).
+Version: 0.3.0. Updated 26 September 2026 (Pakistan date).
 
 ## Verified in this delivery
+- The 0.2.0 automated run below predates receptionist attribution and the latest
+  slip/list display changes. These final changes have not been rerun through tests.
 - Python compilation completed successfully for all source and test modules.
 - `python -m unittest discover -s tests -v`: **27 passed, 1 skipped**.
 - Full run: 28 discovered tests.
@@ -59,6 +61,8 @@ Version: 0.2.0. Updated 26 September 2026 (Pakistan date).
 - [ ] Verify continuous serials, same-day shifts, next-day tokens with test data.
 - [ ] Print with actual thermal hardware; check both numbers, long names, fees,
       address wrapping, paper feed, clipping and cut.
+- [ ] Confirm consultation and procedure slips show the logged-in receptionist;
+      confirm Patients shows the registering receptionist.
 - [ ] Enter a one-off consultation charge as a receptionist; verify the receipt
       and that the doctor's saved default fee is unchanged.
 - [ ] Print saved and custom procedure receipts; verify they have Sr. No. but no

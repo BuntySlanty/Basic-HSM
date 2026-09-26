@@ -1,7 +1,7 @@
-# Furqan Hospital Reception — version 0.2
+# Furqan Hospital Reception — version 0.3
 
-Status: first source implementation complete; data-service tests pass;
-Windows UI, executable build and physical printer acceptance remain pending.
+Status: version 0.3 source implementation complete; automated test history is
+recorded in the validation handoff; target printer acceptance remains pending.
 
 ## Purpose
 A small offline reception application for one low-spec Windows computer while
@@ -17,6 +17,8 @@ attendance, collect consultation fees, print thermal slips, and find daily histo
   A second shift on the same day continues the sequence. A new date starts at 1.
 - Consultation slips show Sr. No. and Token No.; procedure slips show Sr. No. only.
   Reprinting does not allocate numbers.
+- Consultation and procedure slips record the signed-in receptionist. Patient
+  records retain the receptionist who first registered them.
 - Consultation fees, payments, receipts, daily records, and thermal printing.
 - Reference layout: hospital name/address, date/day, doctor/department, patient
   name/age/sex/phone/address, fee, and footer, with both numbering fields added.
@@ -63,12 +65,12 @@ These keep development moving and may be changed after the first demonstration.
 | Table | Purpose and key constraints |
 |---|---|
 | users | Unique username, salted PBKDF2 hash, role, enabled flag, failed-login lock |
-| patients | Internal UUID and increasing display ID; demographics; phone not unique |
+| patients | Internal UUID and increasing display ID; demographics; phone not unique; registering staff account |
 | doctors | UUID, name, department, default fee, active flag |
 | receipt_counter | Shared increasing Sr. No. for visits and procedure receipts |
-| visits | Sr. No.; UUID; patient/doctor links; Pakistan date; token; charged fee/discount; immutable receipt snapshot; unique request key; cancellation |
+| visits | Sr. No.; UUID; patient/doctor links; Pakistan date; token; charged fee/discount; immutable receipt snapshot including receptionist; unique request key; cancellation |
 | procedures | Reusable procedure names and default fees |
-| procedure_receipts | Sr. No.; patient, procedure, fee, method, date, and immutable receipt snapshot |
+| procedure_receipts | Sr. No.; patient, procedure, fee, method, date, receptionist, and immutable receipt snapshot |
 | token_counters | Primary key (doctor_id, visit_date), next token allocated transactionally |
 | payments | UUID, visit link, signed amount, payment method/date, reason, actor; unique request key |
 | audit_log | Actor, time, action, entity reference; append-only through app |
