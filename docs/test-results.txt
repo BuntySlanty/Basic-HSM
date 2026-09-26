@@ -1,0 +1,29 @@
+test_amount_and_demographic_validation (test_service.ReceptionTests.test_amount_and_demographic_validation) ... ok
+test_app_instance_lock_is_released (test_service.ReceptionTests.test_app_instance_lock_is_released) ... ok
+test_backup_restore_integrity_and_known_number_preservation (test_service.ReceptionTests.test_backup_restore_integrity_and_known_number_preservation) ... ok
+test_cancel_preserves_numbers_and_does_not_refund (test_service.ReceptionTests.test_cancel_preserves_numbers_and_does_not_refund) ... ok
+test_cannot_overpay_or_overrefund (test_service.ReceptionTests.test_cannot_overpay_or_overrefund) ... ok
+test_concurrent_visits_have_unique_numbers (test_service.ReceptionTests.test_concurrent_visits_have_unique_numbers) ... ok
+test_discount_requires_admin_and_reason (test_service.ReceptionTests.test_discount_requires_admin_and_reason) ... ok
+test_duplicate_visit_is_idempotent_and_changed_payload_rejected (test_service.ReceptionTests.test_duplicate_visit_is_idempotent_and_changed_payload_rejected) ... ok
+test_export_has_stable_ids_and_no_password_hashes (test_service.ReceptionTests.test_export_has_stable_ids_and_no_password_hashes) ... ok
+test_failure_rolls_back_token_visit_and_payment (test_service.ReceptionTests.test_failure_rolls_back_token_visit_and_payment) ... ok
+test_historical_snapshots_survive_edits (test_service.ReceptionTests.test_historical_snapshots_survive_edits) ... ok
+test_inactive_doctor_cannot_receive_new_visits (test_service.ReceptionTests.test_inactive_doctor_cannot_receive_new_visits) ... ok
+test_invalid_restore_preserves_live_records (test_service.ReceptionTests.test_invalid_restore_preserves_live_records) ... ok
+test_logged_out_access_and_disabled_account (test_service.ReceptionTests.test_logged_out_access_and_disabled_account) ... ok
+test_midnight_uses_pakistan_date_not_utc (test_service.ReceptionTests.test_midnight_uses_pakistan_date_not_utc) ... ok
+test_non_windows_print_failure_keeps_visit (test_service.ReceptionTests.test_non_windows_print_failure_keeps_visit) ... ok
+test_partial_payment_ledger_refund_and_payment_dates (test_service.ReceptionTests.test_partial_payment_ledger_refund_and_payment_dates) ... ok
+test_password_change_and_login_lockout (test_service.ReceptionTests.test_password_change_and_login_lockout) ... ok
+test_receipt_widths_and_reprinting_do_not_allocate_numbers (test_service.ReceptionTests.test_receipt_widths_and_reprinting_do_not_allocate_numbers) ... ok
+test_reception_permissions_enforced_in_service (test_service.ReceptionTests.test_reception_permissions_enforced_in_service) ... ok
+test_restart_preserves_patient_serial_and_tokens (test_service.ReceptionTests.test_restart_preserves_patient_serial_and_tokens) ... ok
+test_shared_phone_is_allowed (test_service.ReceptionTests.test_shared_phone_is_allowed) ... ok
+test_system_serial_doctor_daily_tokens_and_second_shift (test_service.ReceptionTests.test_system_serial_doctor_daily_tokens_and_second_shift) ... ok
+test_screens_and_receipt_open (test_ui_smoke.DesktopSmokeTest.test_screens_and_receipt_open) ... skipped 'Graphical display required'
+
+----------------------------------------------------------------------
+Ran 24 tests in 18.982s
+
+OK (skipped=1)

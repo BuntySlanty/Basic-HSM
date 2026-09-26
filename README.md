@@ -145,5 +145,3 @@ References: [Tkinter](https://docs.python.org/3/library/tkinter.html),
 [SQLite](https://docs.python.org/3/library/sqlite3.html),
 [Windows printing](https://learn.microsoft.com/en-us/windows/win32/printdocs/how-to--print-using-the-gdi-print-api),
 [PyInstaller](https://pyinstaller.org/en/stable/).
-#   B a s i c - H S M  
- 

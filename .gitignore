@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.build-venv/
+build/
+dist/
+*.spec
+test-data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+application.lock
+.impeccable/
