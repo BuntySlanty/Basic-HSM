@@ -1,10 +1,11 @@
 # Validation and installation handoff
 
-Version: 0.3.0. Updated 26 September 2026 (Pakistan date).
+Version: 0.4.0. Updated 26 September 2026 (Pakistan date).
 
 ## Verified in this delivery
-- The 0.2.0 automated run below predates receptionist attribution and the latest
-  slip/list display changes. These final changes have not been rerun through tests.
+- The 0.2.0 automated run below predates receptionist attribution, named staff
+  accounts, and the latest slip/list display changes. These final changes have
+  not been rerun through tests.
 - Python compilation completed successfully for all source and test modules.
 - `python -m unittest discover -s tests -v`: **27 passed, 1 skipped**.
 - Full run: 28 discovered tests.

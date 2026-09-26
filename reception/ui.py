@@ -158,7 +158,10 @@ class App:
                   style="CardTitle.TLabel", font=("Segoe UI", 22, "bold")).pack(anchor="w")
         ttk.Label(box, text="Create your administrator account" if setup else "Sign in to continue to reception",
                   style="CardMuted.TLabel").pack(anchor="w", pady=(5, 24))
-        username, password, confirm = tk.StringVar(), tk.StringVar(), tk.StringVar()
+        username, password, confirm, display_name = tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar()
+        if setup:
+            ttk.Label(box, text="Full name", style="Card.TLabel").pack(anchor="w")
+            ttk.Entry(box, textvariable=display_name, width=35).pack(fill="x", pady=(3, 12))
         ttk.Label(box, text="Username", style="Card.TLabel").pack(anchor="w")
         user_entry = ttk.Entry(box, textvariable=username, width=35)
         user_entry.pack(fill="x", pady=(3, 12))
@@ -173,7 +176,7 @@ class App:
         def submit():
             if setup and password.get() != confirm.get():
                 raise ValueError("Passwords do not match.")
-            self.user = self.s.setup(username.get(), password.get()) if setup else self.s.login(username.get(), password.get())
+            self.user = self.s.setup(username.get(), password.get(), display_name.get()) if setup else self.s.login(username.get(), password.get())
             password.set("")
             confirm.set("")
             self.touch()
@@ -190,7 +193,7 @@ class App:
         header = ttk.Frame(self.shell, style="Header.TFrame", padding=(22, 16))
         header.pack(fill="x")
         ttk.Label(header, text="Furqan Hospital  /  Reception", style="Brand.TLabel").pack(side="left")
-        ttk.Label(header, text=f"{self.user['username']}  ·  {self.user['role'].title()}  ·  Offline",
+        ttk.Label(header, text=f"{self.user['display_name']} ({self.user['username']})  ·  {self.user['role'].title()}  ·  Offline",
                   style="HeaderMeta.TLabel").pack(side="right")
         nav = ttk.Frame(self.shell, style="Nav.TFrame", padding=(10, 4))
         nav.pack(fill="x")
@@ -594,7 +597,7 @@ class App:
         entry.pack(side="left",padx=(0,8))
         tree = self.table(self.content,[("id","Patient ID",80),("name","Name",220),
             ("age","Last reported age",130),("sex","Sex",80),("phone","Phone",150),
-            ("registered_by","Receptionist",140)],13)
+            ("registered_by","Receptionist",220)],13)
 
         def refresh(_=None):
             self.clear_tree(tree)
@@ -948,10 +951,10 @@ class App:
     def staff(self):
         self.s.require(True)
         self.page("Staff accounts", "Each receptionist should use their own account. Keep at least one active administrator.")
-        tree = self.table(self.content,[("username","Username",220),("role","Role",150),("active","Active",100)],10)
+        tree = self.table(self.content,[("display_name","Full name",200),("username","Username",180),("role","Role",130),("active","Active",90)],10)
         for r in self.s.users():
             self.add_row(tree, iid=r["id"],
-                         values=(r["username"], r["role"], "Yes" if r["active"] else "No"))
+                         values=(r["display_name"], r["username"], r["role"], "Yes" if r["active"] else "No"))
         bar = ttk.Frame(self.content)
         bar.pack(fill="x",pady=8)
 
@@ -959,15 +962,21 @@ class App:
             def submit(v):
                 if v["password"] != v["confirm"]:
                     raise ValueError("Passwords do not match.")
-                self.s.add_user(v["username"],v["password"],v["role"])
+                self.s.add_user(v["username"],v["password"],v["role"],v["display_name"])
                 self.staff()
-            self.form("New staff account",[("username","Username","",None),("password","Password","","password"),
+            self.form("New staff account",[("display_name","Full name","",None),("username","Username","",None),("password","Password","","password"),
                 ("confirm","Confirm password","","password"),("role","Role","reception",("reception","admin"))],submit)
 
         def toggle():
             self.s.toggle_user(self.selected(tree))
             self.staff()
+        def rename():
+            user_id = self.selected(tree)
+            selected = next(row for row in self.s.users() if row["id"] == user_id)
+            self.form("Edit staff name",[("display_name","Full name",selected["display_name"],None)],
+                      lambda values: (self.s.save_user_display_name(user_id, values["display_name"]), self.staff()))
         self.button(bar,"Add staff",add)
+        self.button(bar,"Edit selected name",rename)
         self.button(bar,"Enable / disable selected",toggle)
 
     def lock(self):

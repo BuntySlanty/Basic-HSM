@@ -7,6 +7,12 @@ from datetime import datetime
 from .service import rupees
 
 
+def receptionist_label(snapshot):
+    name = snapshot.get("receptionist_name") or snapshot.get("receptionist") or "Unknown"
+    username = snapshot.get("receptionist_username")
+    return f"{name} ({username})" if username and username not in name else name
+
+
 def receipt_text(visit, width="80"):
     columns = 32 if str(width) == "58" else 44
     snap = visit["snapshot"]
@@ -23,7 +29,7 @@ def receipt_text(visit, width="80"):
     moment = datetime.fromisoformat(visit["created_at"])
     add(moment.strftime("%d-%m-%Y  %A  %H:%M"))
     add(f"Sr. No: {visit['sr']}    Token No: {visit['token']:02d}")
-    add(f"Receptionist: {snap.get('receptionist', 'Unknown')}")
+    add(f"Receptionist: {receptionist_label(snap)}")
     add(f"Consultant: {doctor['name']}")
     add(f"Department: {doctor['department']}")
     add("-"*columns)
@@ -73,7 +79,7 @@ def procedure_receipt_text(receipt, width="80"):
     moment = datetime.fromisoformat(receipt["created_at"])
     add(moment.strftime("%d-%m-%Y  %A  %H:%M"))
     add(f"Sr. No: {receipt['sr']}    Procedure receipt")
-    add(f"Receptionist: {snap.get('receptionist', 'Unknown')}")
+    add(f"Receptionist: {receptionist_label(snap)}")
     add("-" * columns)
     add(f"Patient ID: {patient['id']}")
     add(f"Patient: {patient['name']}")

@@ -1,6 +1,6 @@
-# Furqan Hospital Reception — version 0.3
+# Furqan Hospital Reception — version 0.4
 
-Status: version 0.3 source implementation complete; automated test history is
+Status: version 0.4 source implementation complete; automated test history is
 recorded in the validation handoff; target printer acceptance remains pending.
 
 ## Purpose
@@ -17,8 +17,9 @@ attendance, collect consultation fees, print thermal slips, and find daily histo
   A second shift on the same day continues the sequence. A new date starts at 1.
 - Consultation slips show Sr. No. and Token No.; procedure slips show Sr. No. only.
   Reprinting does not allocate numbers.
-- Consultation and procedure slips record the signed-in receptionist. Patient
-  records retain the receptionist who first registered them.
+- Consultation and procedure slips print the receptionist's full name and unique
+  username. Patient records retain the full name and username of the registering
+  staff member.
 - Consultation fees, payments, receipts, daily records, and thermal printing.
 - Reference layout: hospital name/address, date/day, doctor/department, patient
   name/age/sex/phone/address, fee, and footer, with both numbering fields added.

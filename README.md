@@ -1,12 +1,12 @@
 # Furqan Hospital Reception
 
-**Version 0.3.0 — functional source build for Windows acceptance testing.**
+**Version 0.4.0 — functional source build for Windows acceptance testing.**
 
 Offline patient/doctor records, visits, continuous serial numbers, doctor-specific
 daily tokens, per-visit fees, procedure receipts, fee collection, thermal receipts,
 patient history, printable shift reports, refunds, staff accounts, backups and
 structured export. Consultation and procedure slips identify the logged-in
-receptionist; the Patients screen shows who registered each patient.
+receptionist by full name and unique username; the Patients screen shows who registered each patient.
 
 Documentation is in `docs/RECEPTION_SPEC.md`; implementation is in `reception/`.
 
@@ -14,7 +14,7 @@ Documentation is in `docs/RECEPTION_SPEC.md`; implementation is in `reception/`.
 1. Extract this entire folder.
 2. Install Python 3.12+ with Tcl/Tk and the Windows `py` launcher.
 3. Double-click `run-windows.cmd`, or run `py -3 run.py` in this folder.
-4. Create an admin username and password; there are no default credentials.
+4. Create an admin full name, username and password; there are no default credentials.
 5. Add a doctor, register a synthetic patient and save a test visit.
 
 For a separate test database, run:

@@ -68,7 +68,7 @@ def password_hash(password, salt=None):
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS users(
- id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL,
+ id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL DEFAULT '', salt TEXT NOT NULL,
  password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','reception')),
  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
  failed INTEGER NOT NULL DEFAULT 0, locked_until REAL NOT NULL DEFAULT 0);
@@ -137,7 +137,7 @@ class Service:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1, 2, 3):
+        if version not in (0, 1, 2, 3, 4):
             self.db.close()
             raise ValueError("Database version is newer than this application.")
         self._ensure_schema()
@@ -152,13 +152,17 @@ class Service:
     def _ensure_schema(self):
         self.db.executescript(SCHEMA)
         with self.tx():
+            user_columns = {row["name"] for row in self.db.execute("PRAGMA table_info(users)")}
+            if "display_name" not in user_columns:
+                self.db.execute("ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
+            self.db.execute("UPDATE users SET display_name=username WHERE display_name=''")
             columns = {row["name"] for row in self.db.execute("PRAGMA table_info(patients)")}
             if "created_by" not in columns:
                 self.db.execute("ALTER TABLE patients ADD COLUMN created_by TEXT REFERENCES users(id)")
                 self.db.execute("""UPDATE patients SET created_by=(
                     SELECT v.created_by FROM visits v WHERE v.patient_id=patients.id
                     ORDER BY v.sr LIMIT 1) WHERE created_by IS NULL""")
-            self.db.execute("PRAGMA user_version=3")
+            self.db.execute("PRAGMA user_version=4")
 
     @contextmanager
     def tx(self):
@@ -193,15 +197,16 @@ class Service:
     def is_setup(self):
         return self.db.execute("SELECT count(*) FROM users").fetchone()[0] > 0
 
-    def setup(self, username, password):
+    def setup(self, username, password, display_name=None):
         username = clean(username, "Username", 50).lower()
+        display_name = clean(display_name or username, "Full name", 100)
         salt, hashed = password_hash(password)
         with self.tx():
             if self.is_setup():
                 raise ValueError("Setup has already been completed.")
             actor = uid()
-            self.db.execute("INSERT INTO users(id,username,salt,password_hash,role) VALUES (?,?,?,?,?)",
-                            (actor, username, salt, hashed, "admin"))
+            self.db.execute("INSERT INTO users(id,username,display_name,salt,password_hash,role) VALUES (?,?,?,?,?,?)",
+                            (actor, username, display_name, salt, hashed, "admin"))
             self.actor = actor
             self.audit("setup", actor)
         return self.require()
@@ -232,20 +237,32 @@ class Service:
     def logout(self):
         self.actor = None
 
-    def add_user(self, username, password, role):
+    def add_user(self, username, password, role, display_name=None):
         self.require(True)
         if role not in ("admin", "reception"):
             raise ValueError("Invalid role.")
+        username = clean(username, "Username", 50).lower()
+        display_name = clean(display_name or username, "Full name", 100)
         salt, hashed = password_hash(password)
         with self.tx():
             new_id = uid()
-            self.db.execute("INSERT INTO users(id,username,salt,password_hash,role) VALUES (?,?,?,?,?)",
-                            (new_id, clean(username, "Username", 50).lower(), salt, hashed, role))
+            self.db.execute("INSERT INTO users(id,username,display_name,salt,password_hash,role) VALUES (?,?,?,?,?,?)",
+                            (new_id, username, display_name, salt, hashed, role))
             self.audit("create_user", new_id)
+
+    def save_user_display_name(self, user_id, display_name):
+        self.require(True)
+        display_name = clean(display_name, "Full name", 100)
+        with self.tx():
+            if not self.db.execute("SELECT 1 FROM users WHERE id=?", (user_id,)).fetchone():
+                raise ValueError("User not found.")
+            self.db.execute("UPDATE users SET display_name=? WHERE id=?", (display_name, user_id))
+            self.audit("user_name_updated", user_id, display_name)
 
     def users(self):
         self.require(True)
-        return [dict(r) for r in self.db.execute("SELECT id,username,role,active FROM users ORDER BY username")]
+        return [dict(r) for r in self.db.execute(
+            "SELECT id,username,display_name,role,active FROM users ORDER BY username")]
 
     def toggle_user(self, user_id):
         self.require(True)
@@ -292,14 +309,16 @@ class Service:
         self.require()
         query = str(query).strip()
         return [dict(r) for r in self.db.execute(
-            "SELECT p.*,COALESCE(u.username,'Unknown') AS registered_by FROM patients p "
+            "SELECT p.*,CASE WHEN u.id IS NULL THEN 'Unknown' ELSE "
+            "COALESCE(NULLIF(u.display_name,''),u.username)||' ('||u.username||')' END AS registered_by FROM patients p "
             "LEFT JOIN users u ON u.id=p.created_by WHERE p.name LIKE ? OR p.phone LIKE ? "
             "OR CAST(p.id AS TEXT)=? ORDER BY p.id DESC LIMIT 200",
             (f"%{query}%", f"%{query}%", query))]
 
     def patient(self, patient_id):
         self.require()
-        row = self.db.execute("SELECT p.*,COALESCE(u.username,'Unknown') AS registered_by "
+        row = self.db.execute("SELECT p.*,CASE WHEN u.id IS NULL THEN 'Unknown' ELSE "
+                              "COALESCE(NULLIF(u.display_name,''),u.username)||' ('||u.username||')' END AS registered_by "
                               "FROM patients p LEFT JOIN users u ON u.id=p.created_by WHERE p.id=?",
                               (patient_id,)).fetchone()
         if not row:
@@ -406,7 +425,9 @@ class Service:
             stamp = self.stamp()
             sr = self._next_receipt_sr()
             snapshot = {"patient": patient, "hospital": self.settings(), "procedure": name,
-                        "receptionist": actor["username"]}
+                        "receptionist": actor["username"],
+                        "receptionist_name": actor["display_name"],
+                        "receptionist_username": actor["username"]}
             self.db.execute("""INSERT INTO procedure_receipts
                 (sr,uuid,request_key,patient_id,procedure_name,receipt_date,created_at,fee,method,snapshot,created_by)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
@@ -424,10 +445,7 @@ class Service:
         if not row:
             raise ValueError("Procedure receipt not found.")
         snapshot = json.loads(row["snapshot"])
-        if "receptionist" not in snapshot:
-            staff = self.db.execute("SELECT username FROM users WHERE id=?",
-                                    (row["created_by"],)).fetchone()
-            snapshot["receptionist"] = staff["username"] if staff else "Unknown"
+        self._hydrate_receptionist(snapshot, row["created_by"])
         return {**dict(row), "snapshot": snapshot}
 
     def procedure_receipts(self, start, end, patient_id=None):
@@ -486,7 +504,9 @@ class Service:
             token = self.db.execute("SELECT last_token FROM token_counters WHERE doctor_id=? AND visit_date=?", (doctor_id, day)).fetchone()[0]
             snapshot = {"patient": {**patient, "age": age, "age_unit": age_unit},
                         "doctor": dict(doctor), "hospital": self.settings(),
-                        "receptionist": actor["username"]}
+                        "receptionist": actor["username"],
+                        "receptionist_name": actor["display_name"],
+                        "receptionist_username": actor["username"]}
             sr = self._next_receipt_sr()
             self.db.execute("INSERT INTO visits(sr,uuid,request_key,patient_id,doctor_id,visit_date,created_at,token,fee,discount,discount_reason,snapshot,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (sr, uid(), request_key, patient_id, doctor_id, day, stamp, token,
@@ -506,15 +526,20 @@ class Service:
             raise ValueError("Visit not found.")
         result = dict(row)
         result["snapshot"] = json.loads(result["snapshot"])
-        if "receptionist" not in result["snapshot"]:
-            staff = self.db.execute("SELECT username FROM users WHERE id=?",
-                                    (result["created_by"],)).fetchone()
-            result["snapshot"]["receptionist"] = staff["username"] if staff else "Unknown"
+        self._hydrate_receptionist(result["snapshot"], result["created_by"])
         result["payments"] = [dict(r) for r in self.db.execute("SELECT * FROM payments WHERE visit_sr=? ORDER BY created_at,rowid", (sr,))]
         result["net_paid"] = sum(p["amount"] for p in result["payments"])
         result["due"] = result["fee"] - result["discount"]
         result["balance"] = max(0, result["due"] - result["net_paid"]) if result["status"] != "cancelled" else 0
         return result
+
+    def _hydrate_receptionist(self, snapshot, user_id):
+        staff = self.db.execute("SELECT username,display_name FROM users WHERE id=?", (user_id,)).fetchone()
+        username = staff["username"] if staff else snapshot.get("receptionist_username", "Unknown")
+        display_name = staff["display_name"] if staff else snapshot.get("receptionist_name")
+        snapshot.setdefault("receptionist_name", display_name or snapshot.get("receptionist") or username)
+        snapshot.setdefault("receptionist_username", username)
+        snapshot.setdefault("receptionist", username)
 
     def visits(self, start, end, doctor_id=None, patient_id=None):
         self.require()
@@ -681,16 +706,16 @@ class Service:
         if not source.is_file() or source == self.path.resolve():
             raise ValueError("Choose a separate valid backup file.")
         with closing(sqlite3.connect(source.as_uri()+"?mode=ro", uri=True)) as other:
-            if other.execute("PRAGMA user_version").fetchone()[0] not in (1, 2, 3):
+            if other.execute("PRAGMA user_version").fetchone()[0] not in (1, 2, 3, 4):
                 raise ValueError("Unsupported backup version.")
             if other.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or other.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("Backup failed integrity checks.")
             for table in ("users", "patients", "doctors", "visits", "payments", "settings", "token_counters", "audit_log"):
                 incoming = [tuple(r) for r in other.execute(f"PRAGMA table_info({table})")]
                 current = [tuple(r) for r in self.db.execute(f"PRAGMA table_info({table})")]
-                if table == "patients" and incoming != current:
-                    legacy_patient_schema = [column for column in current if column[1] != "created_by"]
-                    if incoming == legacy_patient_schema:
+                if incoming != current:
+                    optional = {"patients": {"created_by"}, "users": {"display_name"}}.get(table, set())
+                    if optional and incoming == [column for column in current if column[1] not in optional]:
                         continue
                 if incoming != current:
                     raise ValueError("Backup schema does not match this application.")
